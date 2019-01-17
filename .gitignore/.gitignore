@@ -1,1 +1,10 @@
+/data
+/log
+*.so
+*.o
 *.pyc
+*.pth
+*.ply
+*.png
+*.txt
+*.egg
