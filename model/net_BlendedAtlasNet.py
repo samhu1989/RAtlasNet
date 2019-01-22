@@ -180,7 +180,7 @@ class BlendedAtlasNet(nn.Module):
         self.mode = kwargs['mode'];
         self.bn = True;
         if self.mode == 'SVR':
-            self.encoder = resnet.resnet18(pretrained=self.pretrained_encoder,num_classes=1024);
+            self.encoder = resnet.resnet18(pretrained=False,num_classes=1024);
         elif self.mode == 'AE':
             self.encoder = nn.Sequential(
                 PointNetfeat(self.pts_num, global_feat=True, trans = False),
@@ -195,7 +195,7 @@ class BlendedAtlasNet(nn.Module):
             assert False,'unkown mode of BlendedAtlasNet'
         self.wdecoder = WGenCon(bottleneck_size=self.grid_dim+self.bottleneck_size,odim=self.grid_num,bn=self.bn);
         self.decoder = nn.ModuleList([PointGenCon(bottleneck_size=self.grid_dim+self.bottleneck_size,bn=self.bn) for i in range(0,self.grid_num)]);
-        self.inv_decoder = nn.ModuleList([PointGenCon(bottleneck_size=3+self.bottleneck_size,bn=self.bn) for i in range(0,self.grid_num)]);
+        self.inv_decoder = PointGenCon(bottleneck_size=3+self.bottleneck_size,bn=self.bn);
         self._init_layers();
 
     def forward(self,*input):
@@ -214,20 +214,19 @@ class BlendedAtlasNet(nn.Module):
         w = torch.cat((grid,expf),1).contiguous();
         w = self.wdecoder(w);
         w = w.view(w.size(0),w.size(1),1,w.size(2));
-        ys = [];
-        invs = []; 
+        yo = None;
         for i in range(0,self.grid_num):
             y = torch.cat((grid,expf),1).contiguous();
             y = self.decoder[i](y);
-            inv_y = torch.cat((y,expf),1).contiguous();
-            inv_y = self.inv_decoder[i](inv_y);
-            y = y.view(y.size(0),1,y.size(1),y.size(2));
-            ys.append(y);
-            inv_y = inv_y.view(inv_y.size(0),1,inv_y.size(1),inv_y.size(2));
-            invs.append(inv_y);
-        yo = torch.sum(w*torch.cat(ys,1).contiguous(),1);
+            y = y*w[:,i,:,:];
+            if yo is None:
+                yo = y;
+            else:
+                yo += y;
+        invo = torch.cat((yo,expf),1).contiguous();
+        invo = self.inv_decoder(invo);
+        #transpose from (bn,3,#points) to (bn,3,#points)
         yo = yo.transpose(2,1).contiguous();
-        invo = torch.sum(w*torch.cat(invs,1).contiguous(),1);
         invo = invo.transpose(2,1).contiguous();
         grid = grid.transpose(2,1).contiguous();
         out = {};
@@ -238,7 +237,7 @@ class BlendedAtlasNet(nn.Module):
         return out;
     
     def rand_grid(self,x):
-        rand_grid = torch.FloatTensor(x.size(0),self.grid_dim,self.num_points//self.grid_num);
+        rand_grid = torch.FloatTensor(x.size(0),self.grid_dim,self.pts_num);
         if self.grid_dim == 3:
             rand_grid.normal_(0.0,1.0);
             rand_grid += 1e-9;
