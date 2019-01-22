@@ -1,2 +1,2 @@
 # RAtlasNet
-Reinforced AtlasNet
+Blended AtlasNet
