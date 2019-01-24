@@ -42,7 +42,7 @@ class Task(object):
             
     def done_tsk(self):
         self.cnt += 1;
-	self.logtxt.flush();
+        self.logtxt.flush();
         return;
         
     def __del__(self):

@@ -6,10 +6,8 @@ import torchvision.transforms as transforms
 import numpy as np
 import os
 from PIL import Image
-from utils import *
+from .utils import *
 
-def get_data(opt);
-    return data;
 
 class ShapeNet(data.Dataset):
     def __init__(self, rootimg = "./data/ShapeNet/ShapeNetRendering", rootpc = "./data/customShapeNet" , class_choice = "chair", train = True, npoints = 2500, normal = False, balanced = False, gen_view=False, SVR=False, idx=0):
