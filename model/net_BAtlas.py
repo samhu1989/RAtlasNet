@@ -4,16 +4,16 @@ class PointMLP(nn.Module):
     def __init__(self, bottleneck_size=2500,odim=3,bn=True):
         self.bottleneck_size = bottleneck_size;
         super(PointMLP, self).__init__();
-        self.conv1 = torch.nn.Conv1d(self.bottleneck_size,self.bottleneck_size//2,1);
-        self.conv2 = torch.nn.Conv1d(self.bottleneck_size//2,self.bottleneck_size//4,1);
-        self.conv3 = torch.nn.Conv1d(self.bottleneck_size//4,self.bottleneck_size//8,1);
-        self.conv4 = torch.nn.Conv1d(self.bottleneck_size//8,odim,1);
+        self.conv1 = torch.nn.Conv1d(self.bottleneck_size,self.bottleneck_size//4,1);
+        self.conv2 = torch.nn.Conv1d(self.bottleneck_size//4,self.bottleneck_size//16,1);
+        self.conv3 = torch.nn.Conv1d(self.bottleneck_size//16,self.bottleneck_size//32,1);
+        self.conv4 = torch.nn.Conv1d(self.bottleneck_size//32,odim,1);
         self.bn = bn;
         self.act = nn.Softmax(dim=1);
         if self.bn:
-            self.bn1 = torch.nn.BatchNorm1d(self.bottleneck_size//2);
-            self.bn2 = torch.nn.BatchNorm1d(self.bottleneck_size//4);
-            self.bn3 = torch.nn.BatchNorm1d(self.bottleneck_size//8);
+            self.bn1 = torch.nn.BatchNorm1d(self.bottleneck_size//4);
+            self.bn2 = torch.nn.BatchNorm1d(self.bottleneck_size//16);
+            self.bn3 = torch.nn.BatchNorm1d(self.bottleneck_size//32);
         
     def forward(self, x):
         if self.bn:
