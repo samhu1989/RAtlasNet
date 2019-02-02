@@ -95,7 +95,7 @@ class PointGenCon(nn.Module):
         self.bottleneck_size = bottleneck_size
         super(PointGenCon, self).__init__()
         self.conv1 = torch.nn.Conv1d(self.bottleneck_size,self.bottleneck_size,1)
-        self.conv2 = torch.nn.Conv1d(self.bottleneck_size,self.bottleneck_size//2,1
+        self.conv2 = torch.nn.Conv1d(self.bottleneck_size,self.bottleneck_size//2,1)
         self.conv3 = torch.nn.Conv1d(self.bottleneck_size//2,self.bottleneck_size//4,1)
         self.conv4 = torch.nn.Conv1d(self.bottleneck_size//4,odim,1)
         self.bn = bn
