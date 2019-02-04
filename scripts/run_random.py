@@ -1,0 +1,1 @@
+#this script is for debug only it runs a forward pass 
