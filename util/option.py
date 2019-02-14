@@ -18,6 +18,7 @@ def get_option():
     parser.add_argument('--w','-w',type=float,default=1.0,help='weight for inverse');
     parser.add_argument('--exec','-X',type=str,action='append',help='running tasks');
     parser.add_argument('--manualSeed', type=int, help='seed', default=0)
+    parser.add_argument('--topk', type=int, help='blend num k', default=3)
     #binary flags:
     parser.add_argument('--ply',action='store_true');
     return parser.parse_args();

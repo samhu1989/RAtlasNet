@@ -8,6 +8,7 @@ class KBAtlas(nn.Module):
         self.grid_num = kwargs['grid_num']
         self.grid_dim = kwargs['grid_dim']
         self.mode = kwargs['mode']
+        self.k = kwargs['topk'];
         self.bn = True
         if self.mode == 'SVR':
             self.encoder = resnet.resnet18(pretrained=False,num_classes=1024);
@@ -16,15 +17,15 @@ class KBAtlas(nn.Module):
                 PointNetfeat(self.pts_num, global_feat=True, trans = False),
                 nn.Linear(1024, self.bottleneck_size),
                 nn.BatchNorm1d(self.bottleneck_size),
-                nn.ReLU()
+                nn.ReLU(inplace=True)
                 )
         elif self.mode == 'OPT':
             self.encoder = OptEncoder(self.bottleneck_size)
             self.bn = False
         else:
             assert False,'unkown mode of BlendedAtlasNet'
-        self.wdecoder = PointMLP(bottleneck_size=self.grid_dim+self.bottleneck_size,odim=self.grid_num,bn=self.bn);
-        self.decoder = nn.ModuleList([PointMLP(bottleneck_size=self.grid_dim+self.bottleneck_size,odim=3,bn=self.bn) for i in range(0,self.grid_num)]);
+        self.wdecoder = WGenCon(bottleneck_size=self.grid_dim+self.bottleneck_size,odim=self.grid_num,bn=self.bn);
+        self.decoder = nn.ModuleList([PointGenCon(bottleneck_size=self.grid_dim+self.bottleneck_size,odim=3,bn=self.bn) for i in range(0,self.grid_num)]);
         self.inv_decoder = PointGenCon(bottleneck_size=3+self.bottleneck_size,odim=3,bn=self.bn);
         self._init_layers()
 
@@ -39,10 +40,11 @@ class KBAtlas(nn.Module):
             grid = input[1]
         else:
             grid = self.rand_grid(f)
-        inv_e = 0.0
-        expf = f.unsqueeze(2).expand(f.size(0),f.size(1),grid.size(2)).contiguous();
+        expf = f.unsqueeze(2).expand(f.size(0),f.size(1),grid.size(2)).contiguous()
+        #generate blending weight
         w = torch.cat((grid,expf),1).contiguous()
         w = self.wdecoder(w)
+        w,kidx = torch.topk(w,self.k,dim=1)
         w = w.view(w.size(0),w.size(1),1,w.size(2))
         yo = None
         for i in range(0,self.grid_num):
