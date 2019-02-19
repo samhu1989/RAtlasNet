@@ -15,7 +15,9 @@ import numpy as np
 import torch.nn.functional as F
 import resnet
 import math
-  
+from torch.utils.checkpoint import checkpoint;
+from functools import partial;
+#NOTE:checkpoint is widely used to reduce GPU memory consumption  
 #atlasnet
 class STN3d(nn.Module):
     def __init__(self, num_points = 2500):
@@ -106,17 +108,27 @@ class PointGenCon(nn.Module):
             self.bn3 = torch.nn.BatchNorm1d(self.bottleneck_size//4)
         
     def forward(self, x):
-        # print(x.size());
-        if self.bn:
-            x = F.relu(self.bn1(self.conv1(x)))
-            x = F.relu(self.bn2(self.conv2(x)))
-            x = F.relu(self.bn3(self.conv3(x)))
-            x = self.th(self.conv4(x))
-        else:
-            x = F.relu(self.conv1(x))
-            x = F.relu(self.conv2(x))
-            x = F.relu(self.conv3(x))
-            x = self.th(self.conv4(x))
+        def func(i,bn,x):
+            if bn:
+                if i == 0:
+                    x = F.relu(self.bn1(self.conv1(x)))
+                elif i == 1:
+                    x = F.relu(self.bn2(self.conv2(x)))
+                else:
+                    x = F.relu(self.bn3(self.conv3(x)))
+                    x = self.th(self.conv4(x))
+            else:
+                if i == 0:
+                    x = F.relu(self.conv1(x))
+                elif i == 1:
+                    x = F.relu(self.conv2(x))
+                else:
+                    x = F.relu(self.conv3(x))
+                    x = self.th(self.conv4(x))
+            return x;
+        x = checkpoint(partial(func,0,self.bn),x);
+        x = checkpoint(partial(func,1,self.bn),x);
+        x = checkpoint(partial(func,2,self.bn),x);
         return x
         
 class WGenCon(nn.Module):
@@ -135,17 +147,28 @@ class WGenCon(nn.Module):
             self.bn3 = torch.nn.BatchNorm1d(self.bottleneck_size//4)
         
     def forward(self, x):
-        if self.bn:
-            x = F.relu(self.bn1(self.conv1(x)))
-            x = F.relu(self.bn2(self.conv2(x)))
-            x = F.relu(self.bn3(self.conv3(x)))
-            x = self.act(self.conv4(x))
-        else:
-            x = F.relu(self.conv1(x))
-            x = F.relu(self.conv2(x))
-            x = F.relu(self.conv3(x))
-            x = self.act(self.conv4(x))
-        return x
+        def func(i,bn,x):
+            if bn:
+                if i == 0:
+                    x = F.relu(self.bn1(self.conv1(x)))
+                elif i == 1:
+                    x = F.relu(self.bn2(self.conv2(x)))
+                else:
+                    x = F.relu(self.bn3(self.conv3(x)))
+                    x = self.act(self.conv4(x))
+            else:
+                if i == 0:
+                    x = F.relu(self.conv1(x))
+                elif i == 1:
+                    x = F.relu(self.conv2(x))
+                else:
+                    x = F.relu(self.conv3(x))
+                    x = self.act(self.conv4(x))
+            return x;
+        x = checkpoint(partial(func,0,self.bn),x);
+        x = checkpoint(partial(func,1,self.bn),x);
+        x = checkpoint(partial(func,2,self.bn),x);
+        return x;
     
 class OptEncoder(nn.Module):
     def __init__(self,bottleneck_size=1024):
@@ -189,27 +212,34 @@ class BlendedAtlasNet(nn.Module):
         x = input[0]
         if x.dim() == 4:
             x = x[:,:3,:,:].contiguous()
-        f = self.encoder(x)
-        outs = []
-        grid = None
+        grid = None;
+        def defunc(x):
+            return self.encoder(x);
+        f = checkpoint(defunc,x);
         if len(input) > 1:
-            grid = input[1]
+            grid = input[1];
         else:
-            grid = self.rand_grid(f)
-        inv_e = 0.0
+            grid = self.rand_grid(f);
         expf = f.unsqueeze(2).expand(f.size(0),f.size(1),grid.size(2)).contiguous()
         w = torch.cat((grid,expf),1).contiguous()
         w = self.wdecoder(w)
         w = w.view(w.size(0),w.size(1),1,w.size(2))
-        yo = None
+        yo = None;
+        def blend(i,*input):
+            decoder = self.decoder[i];
+            grid = input[0];
+            expf = input[1];
+            w = input[2];
+            y = torch.cat((grid,expf),1).contiguous();
+            y = decoder(y);
+            y = y*w;
+            return y;
         for i in range(0,self.grid_num):
-            y = torch.cat((grid,expf),1).contiguous()
-            y = self.decoder[i](y)
-            y = y*w[:,i,:,:]
+            y = partial(blend,i)(grid,expf,w[:,i,:,:]);
             if yo is None:
-                yo = y
+                yo = y;
             else:
-                yo += y
+                yo += y;
         invo = torch.cat((yo,expf),1).contiguous()
         invo = self.inv_decoder(invo)
         #transpose from (bn,3,#points) to (bn,3,#points)
