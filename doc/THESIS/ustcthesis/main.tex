@@ -1,0 +1,89 @@
+% !TeX encoding = UTF-8
+% !TeX program = xelatex
+% !TeX spellcheck = en_US
+
+\documentclass[doctor]{ustcthesis}
+% doctor|master|bachelor [academic|professional] [chinese|english] [print|pdf]
+% [super|numebers|authoryear]
+
+\title{基于深度学习从单张图像生成三维形状的方法研究}
+\author{胡思宇}
+\major{信息与通信工程}
+\supervisor{吴枫\ 教授}
+\cosupervisor{陈雪锦\ 副教授}
+% \date{二〇一七年五月一日} % 注释掉则为今日
+% \professionaltype{专业学位类型}
+% \secretlevel{秘密}        % 绝密|机密|秘密，注释本行则不保密
+% \secretyear{20}           % 保密年限
+
+\entitle{Research on Deep Learning Methods for Shape Generation from Single View Image}
+\enauthor{Siyu Hu}
+\enmajor{Information and Communication Engineer}
+\ensupervisor{Prof. Feng Wu}
+\encosupervisor{Prof. Xuejin Chen}
+% \endate{May 1, 2017}      % Today if commented
+% \enprofessionaltype{Professional degree type}
+% \ensecretlevel{Secret}    % Top secret|Highly secret|Secret
+
+
+% 加载宏包和配置
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage[ruled,linesnumbered]{algorithm2e}
+\usepackage{siunitx}
+\usepackage{amsthm}
+\usepackage{hyperref}
+
+\DeclareRobustCommand\cs[1]{\texttt{\char`\\#1}}
+\newcommand\pkg{\textsf}
+
+\renewcommand\vec{\symbf}
+\newcommand\mat{\symbf}
+\newcommand\ts{\symbfsf}
+\newcommand\real{\mathbf{R}}
+
+
+
+
+\begin{document}
+
+% 研究生论文:
+%   封面，原创性声明和授权使用声明
+%   frontmatter: 摘要，目录，[图、表清单]，[符号说明]
+%   mainmatter: 正文章节，参考文献
+%   appendix: 附录
+%   backmatter: 致谢，已发表论文列表
+%
+% 本科生论文:
+%   封面
+%   frontmatter: 致谢，目录，摘要
+%   mainmatter: 正文章节，参考文献
+%   appendix: 附录
+
+\maketitle
+\makestatement
+
+\frontmatter
+\input{chapters/abstract}
+\tableofcontents
+% \listoffigures
+% \listoftables
+\input{chapters/notation}
+
+\mainmatter
+\input{chapters/intro}
+\input{chapters/floats}
+\input{chapters/math}
+\input{chapters/citations}
+\bibliography{bib/ustc}
+
+\appendix
+\input{chapters/complementary}
+
+\backmatter
+\input{chapters/acknowledgements}
+\input{chapters/publications}
+
+\end{document}
