@@ -97,7 +97,9 @@ def save_model(logtxt,dirname,net,opt,vcd,vall):
     global best_all;
     cdname = dirname+os.sep+opt['mode']+'gn'+str(opt['grid_num'])+'_cd';
     allname = dirname+os.sep+opt['mode']+'gn'+str(opt['grid_num'])+'_all';
+    name = dirname+os.sep+opt['mode']+'gn'+str(opt['grid_num'])+'_current';
     sdict = net.state_dict();
+    torch.save(sdict,name+'.pth');
     if vcd < best_cd[-1]:
         best_cd[-1] = vcd;
         best_cd = np.sort(best_cd);
