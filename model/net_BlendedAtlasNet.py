@@ -178,7 +178,7 @@ class OptEncoder(nn.Module):
         self.f.data.normal_(0,math.sqrt(2./float(self.bottleneck_size)))
         
     def forward(self,x):
-        return self.f
+        return self.f;
         
 class BlendedAtlasNet(nn.Module):
     def __init__(self,*args,**kwargs):
@@ -213,9 +213,13 @@ class BlendedAtlasNet(nn.Module):
         if x.dim() == 4:
             x = x[:,:3,:,:].contiguous()
         grid = None;
-        def defunc(x):
-            return self.encoder(x);
-        f = checkpoint(defunc,x);
+        f = None;
+        if self.mode != 'OPT':
+            def defunc(x):
+                return self.encoder(x);
+            f = checkpoint(defunc,x);
+        else:
+            f = self.encoder(x);
         if len(input) > 1:
             grid = input[1];
         else:

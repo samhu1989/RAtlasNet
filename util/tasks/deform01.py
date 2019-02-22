@@ -69,7 +69,10 @@ class RealTask(Task):
         if torch.cuda.is_available():
             self.gt = self.gt.cuda();
         #Grid
-        grid,Li,Lw,fidx = sphere_grid(1,self.opt['pts_num'],'link');
+        if not self.opt['grid_ply']:
+            grid,Li,Lw,fidx = sphere_grid(1,self.opt['pts_num'],'link');
+        else:
+            grid,Li,Lw,fidx = ply_grid(1,self.opt['grid_ply']);
         T=np.dtype([("n",np.uint8),("i0",np.int32),('i1',np.int32),('i2',np.int32)]);
         if self.opt['ply']:
             self.plyface = np.zeros(shape=[fidx.shape[0]],dtype=T);

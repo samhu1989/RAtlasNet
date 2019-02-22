@@ -29,7 +29,7 @@ def eval_ae(net,pts):
 
 def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     optim.zero_grad();
-    points = Variable(pts);
+    points = Variable(pts,requires_grad=True);
     points = points.transpose(2,1).contiguous();
     points = points.cuda();
     out = net(points);
@@ -57,7 +57,7 @@ def eval_svr(net,pts,img):
     
 def train_svr(net,optim,cd_meter,inv_meter,pts,img,opt):
     optim.zero_grad();
-    img = Variable(img);
+    img = Variable(img,requires_grad=True);
     img = img.cuda();
     points = Variable(pts);
     points = points.cuda();

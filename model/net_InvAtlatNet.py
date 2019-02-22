@@ -1,6 +1,8 @@
 from __future__ import print_function
-import argparse
+import sys
 import os
+sys.path.append(os.path.dirname(__file__))
+import argparse
 import random
 import torch
 import torch.nn as nn
@@ -172,38 +174,37 @@ class OptDecoder(nn.Module):
         return self.th(self.conv2(x));
         
 class InvAtlasNet(nn.Module):
-    def __init__(self,num_points=2500,bottleneck_size=1024,grid_num=1,pretrained_encoder=False,grid_dim=3,mode='AE'):
+    def __init__(self,*args,**kwargs):
         super(InvAtlasNet, self).__init__();
-        self.num_points = num_points;
-        self.pretrained_encoder = pretrained_encoder;
-        self.bottleneck_size = bottleneck_size;
-        self.grid_num = grid_num;
-        self.grid_dim = grid_dim;
-        self.inv_num = 1;
-        self.mode = mode;
+        self.pretrained_encoder = False;
+        self.pts_num = kwargs['pts_num']
+        self.bottleneck_size = 1024
+        self.grid_num = kwargs['grid_num']
+        self.grid_dim = kwargs['grid_dim']
+        self.mode = kwargs['mode']
+        self.bn = True
         self.inv_y = None;
-        if mode == 'SVR':
+        if self.mode == 'SVR':
             self.encoder = resnet.resnet18(pretrained=self.pretrained_encoder,num_classes=1024);
-        elif mode == 'AE':
+        elif self.mode == 'AE':
             self.encoder = nn.Sequential(
                 PointNetfeat(num_points, global_feat=True, trans = False),
                 nn.Linear(1024, self.bottleneck_size),
                 nn.BatchNorm1d(self.bottleneck_size),
                 nn.ReLU()
                 );
-        elif mode == 'OPT':
-            self.encoder = OptEncoder(bottleneck_size);
+        elif self.mode == 'OPT':
+            self.encoder = OptEncoder(self.bottleneck_size);
         else:
             assert False,'unkown mode of InvAtlasNet'
-        if mode == 'OPT':
-            self.decoder = PointGenCon(bottleneck_size=grid_dim+self.bottleneck_size);
+        if self.mode == 'OPT':
+            self.decoder = PointGenCon(bottleneck_size=self.grid_dim+self.bottleneck_size);
         else:
-            self.decoder = nn.ModuleList([PointGenCon(bottleneck_size=grid_dim+self.bottleneck_size) for i in range(0,self.grid_num)]);
+            self.decoder = nn.ModuleList([PointGenCon(bottleneck_size=self.grid_dim+self.bottleneck_size) for i in range(0,self.grid_num)]);
         bn = True;
         if self.grid_dim == 2:
             bn = False;
-        self.inv_decoder = nn.ModuleList([PointGenCon(bottleneck_size=3+self.bottleneck_size,bn=bn) for i in range(0,self.inv_num)]);
-        #self.all_decoder = nn.ModuleList([self.decoder,self.inv_decoder]);
+        self.inv_decoder = PointGenCon(bottleneck_size=3+self.bottleneck_size,bn=self.bn)
         self._init_layers();
 
     def forward(self,*input):
@@ -215,27 +216,26 @@ class InvAtlasNet(nn.Module):
         grid = None;
         if len(input) > 1:
             grid = input[1];
-        inv_e = 0.0;
+        if grid is None:
+            grid = self.rand_grid(f);
+        expf = f.unsqueeze(2).expand(f.size(0),f.size(1),grid.size(2)).contiguous();
         for i in range(0,self.grid_num):
-            if grid is None:
-                rand_grid = self.rand_grid(f);
-            else:
-                rand_grid = grid;
-            expf = f.unsqueeze(2).expand(f.size(0),f.size(1),rand_grid.size(2)).contiguous();
-            y = torch.cat((rand_grid,expf),1).contiguous();
+            y = torch.cat((grid,expf),1).contiguous();
             if self.mode != 'OPT': 
                 y = self.decoder[i](y);
             else:
                 y = self.decoder(y);
             outs.append(y);
-            inv_y = torch.cat((y,expf),1).contiguous();
-            inv_y_avg = self.inv_decoder[0](inv_y);
-            sep_grid = self._map_patch_2_sphere(rand_grid,i);
-            inv_e += torch.mean(torch.sum((inv_y_avg - sep_grid)**2,dim=1));
         yout = torch.cat(outs,2).contiguous().transpose(2,1).contiguous();
-        inv_e /= float(self.grid_num);
-        self.inv_y = inv_y_avg.transpose(2,1).contiguous();
-        return yout,inv_e;
+        inv_y = torch.cat((y,expf),1).contiguous();
+        inv_y = self.inv_decoder(inv_y);
+        inv_y = inv_y.transpose(2,1).contiguous()
+        grid = grid.transpose(2,1).contiguous()
+        out = {}
+        out['y'] = yout
+        out['inv_x'] = inv_y
+        out['grid_x'] = grid
+        return out;
     
     def rand_grid(self,x):
         rand_grid = torch.FloatTensor(x.size(0),self.grid_dim,self.num_points//self.grid_num);
@@ -264,20 +264,3 @@ class InvAtlasNet(nn.Module):
             elif isinstance(m,nn.BatchNorm2d):
                 m.weight.data.fill_(1);
                 m.bias.data.zero_();
-    
-    def _map_patch_2_sphere(self,grid,i):
-        if grid.size(1) == 3:
-            return grid;
-        elif grid.size(1) == 2:
-            newgrid = None;
-            if grid.is_cuda:
-                newgrid = torch.cuda.FloatTensor(grid.size(0),3,grid.size(2));
-            else:
-                newgrid = torch.FloatTensor(grid.size(0),3,grid.size(2));
-            newgrid[:,2,:] = 2.0*(grid.data[:,1,:] - 0.5);
-            r = torch.sqrt(1.0 - newgrid[:,2,:]**2);
-            newgrid[:,0,:] = r*torch.cos(2.0*np.pi*(grid.data[:,0,:]+i)/float(self.grid_num));
-            newgrid[:,1,:] = r*torch.sin(2.0*np.pi*(grid.data[:,0,:]+i)/float(self.grid_num));
-            if isinstance(grid,Variable):
-                newgrid = Variable(newgrid);
-            return newgrid;

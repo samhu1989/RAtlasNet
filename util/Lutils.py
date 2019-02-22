@@ -121,14 +121,24 @@ def sphere_grid(b,m,Ltype):
         return sphere_grid_link(b,m);
     else:
         return sphere_grid_laplace(b,m,Ltype);
-    
+        
+def ply_grid(b,fpath):
+    ply_data = read_ply(fpath);
+    pts = np.array(ply_data['points']);
+    pts = pts.transpose((1,0));
+    pts = pts.reshape((1,3,-1));
+    fidx = np.array(ply_data['mesh']);
+    grid = torch.FloatTensor(pts);
+    Li,Lw = link(b,pts,fidx);
+    grid = grid.repeat(b,1,1).contiguous();
+    return grid,Li,Lw,fidx;
+
 def repeat_face(fidx,n,num):
     simp = fidx.simplices;
     newsimp = np.zeros([simp.shape[0]*n,3],dtype=simp.dtype)
     for i in range(n):
         newsimp[i*simp.shape[0]:(i+1)*simp.shape[0],:] = simp + i*num;
     fidx.simplices = newsimp;
-    
     
 def patch_grid(b,m,n):
     pts = np.random.uniform(0,1,[1,2,m//n]).astype(np.float32);
