@@ -224,6 +224,8 @@ class BlendedAtlasNet(nn.Module):
             grid = input[1];
         else:
             grid = self.rand_grid(f);
+        if self.training:
+            grid += (torch.normal(0.0,1e-3*torch.ones(grid.size()))).type(grid.type());
         expf = f.unsqueeze(2).expand(f.size(0),f.size(1),grid.size(2)).contiguous()
         w = torch.cat((grid,expf),1).contiguous()
         w = self.wdecoder(w)

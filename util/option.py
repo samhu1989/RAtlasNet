@@ -5,6 +5,7 @@ def get_option():
     parser.add_argument('--batchSize','-bs',type=int,default=32,help='input batch size')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=6)
     parser.add_argument('--nepoch', type=int, default=400, help='number of epochs to train for')
+    parser.add_argument('--last_epoch', type=int, default=0, help='give last epoch to continue training from server\'s break')
     parser.add_argument('--model','-m',type=str,default = '',help='model path load');
     parser.add_argument('--mode','-md', type=str, default = 'AE',  help='mode');
     parser.add_argument('--pts_num', type=int, default = 2500,  help='number of points')
