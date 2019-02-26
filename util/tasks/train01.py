@@ -218,7 +218,9 @@ class RealTask(Task):
         self.valid_cd = AverageValueMeter();
         self.valid_inv = AverageValueMeter();
         self.optim = optim.Adam(self.net.parameters(),lr=self.opt['lr'],weight_decay=self.opt['weight_decay']);
-        self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim,40,eta_min=0,last_epoch=-1);
+        for group in self.optim.param_groups:
+            group.setdefault('initial_lr', group['lr']);
+        self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim,40,eta_min=0,last_epoch=self.opt['last_epoch']);
         #
         self.train_loss_acc0 = 1e-9;
         self.train_loss_accs = 0;
@@ -256,7 +258,7 @@ class RealTask(Task):
                 loss,cd,inv_err = train_ae(self.net,self.optim,self.train_cd,self.train_inv,points,self.opt);
             self.train_loss_accs = self.train_loss_accs * 0.99 + loss.data.cpu().numpy();
             self.train_loss_acc0 = self.train_loss_acc0 * 0.99 + 1;
-            print('[%d: %d/%d] train loss:%f,%f,%f/%f' %(self.cnt,i,len(self.train_data)//self.opt['batchSize'],cd.data.cpu().numpy(),inv_err.data.cpu().numpy(),loss.data.cpu().numpy(),self.train_loss_accs/self.train_loss_acc0));
+            print('[%d: %d/%d] train loss:%f,%f,%f/%f' %(self.cnt+self.opt['last_epoch'],i,len(self.train_data)//self.opt['batchSize'],cd.data.cpu().numpy(),inv_err.data.cpu().numpy(),loss.data.cpu().numpy(),self.train_loss_accs/self.train_loss_acc0));
 
     def load_pretrain(self):
         if self.opt['model']!='':
@@ -268,7 +270,7 @@ class RealTask(Task):
             return;
         self.train();
         self.eval();
-        write_log(self.logtxt,self.valid_cd,self.valid_inv,self.valid_data,self.train_cd,self.train_inv,self.cnt);
+        write_log(self.logtxt,self.valid_cd,self.valid_inv,self.valid_data,self.train_cd,self.train_inv,self.cnt+self.opt['last_epoch']);
         save_model(self.logtxt,self.tskdir,self.net,self.opt,self.valid_cd.avg,self.valid_cd.avg+self.opt['w']*self.valid_inv.avg);
     
     def createOptim(self):

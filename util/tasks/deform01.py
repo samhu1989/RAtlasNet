@@ -42,7 +42,10 @@ class RealTask(Task):
         dist1, dist2 = distChamfer(self.gt,y);
         cd = (torch.mean(dist1)) + (torch.mean(dist2));
         inv_err = torch.mean(torch.sum((invy - rgrid)**2,dim=2));
-        loss = cd + self.opt['w']*inv_err;
+        if cd < inv_err:
+            loss = inv_err;
+        else:
+            loss = cd + self.opt['w']*inv_err;
         self.optim.zero_grad();
         loss.backward();
         self.optim.step();
