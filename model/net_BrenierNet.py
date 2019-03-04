@@ -1,5 +1,12 @@
 #
 from .net_InvAtlatNet import *;
+class Dirac(nn.Module):
+    def __init__(self):
+        super(Brenier,self).__init__();
+        
+    def forward(self,*input):
+        return V;
+
 class Brenier(nn.Module):
     def __init__(self):
         super(Brenier,self).__init__();
@@ -15,7 +22,7 @@ class Brenier(nn.Module):
         V = torch.bmm(Y,X)+H.view(H.size(0),H.size(1),1)
         V,_ = torch.max(V,dim=1);
         return V;
-        
+#        
 class BlockBrenier(nn.Module):
     def __init__(self):
         super(BlockBrenier,self).__init__();
@@ -27,11 +34,11 @@ class BlockBrenier(nn.Module):
         Hs = input[2];
         maxval = self.base(*[X,Ys[0],Hs[0]]);
         for i in range(1,len(Ys)):
-            maxval = torch.max(maxval,self.base(*[X,Ys[i],Hs[i]]));
+            maxval = torch.max(maxval,self.base(*[X,Ys[i],Hs[i]]))
         return maxval;
 #numeric gradient        
 class NumGrad(nn.Module):
-    def __init__(self,eps=1e-4):
+    def __init__(self,eps=1e-3):
         self.eps = eps;
         super(NumGrad,self).__init__();
         
@@ -44,7 +51,8 @@ class NumGrad(nn.Module):
         for i in range(X.size(1)):
             eps = torch.zeros(X.size(0),X.size(1),X.size(2));
             eps[:,i,:] = self.eps;
-            input[0] = X + eps.type(X.type());
+            with torch.no_grad():
+                input[0] = X + eps.type(X.type());
             grad = ( func(*input) - e ) / self.eps ;
             grad_lst.append(grad.view(grad.size(0),1,grad.size(1)));
         return torch.cat(grad_lst,1).contiguous();
@@ -54,16 +62,12 @@ class Ydecoder(nn.Module):
         self.bn = bn;
         self.grid_dim = grid_dim;
         super(Ydecoder,self).__init__();
-        self.fc1 = nn.Linear(size,size//2);
-        self.fc2 = nn.Linear(size//2,self.grid_dim*ynum);
-        self.th = nn.Tanh();
-        if self.bn:
-            self.bn1 = torch.nn.BatchNorm1d(size//2);
+        self.Y = torch.zeros(1,grid_dim,ynum);
+        self.Y.uniform_(-1.0,1.0);
     
     def forward(self,x):
-        x = F.relu(self.fc1(x));
-        x = self.th(self.fc2(x));
-        return x.view(x.size(0),self.grid_dim,-1);
+        Y = self.Y.repeat(x.size(0),1,1);
+        return Y.type(x.type());
         
 class Hdecoder(nn.Module):
     def __init__(self,size=1024,ynum=100,bn=False):
@@ -71,13 +75,15 @@ class Hdecoder(nn.Module):
         super(Hdecoder,self).__init__();
         self.fc1 = nn.Linear(size,size//2);
         self.fc2 = nn.Linear(size//2,ynum);
-        self.th = nn.Tanhshrink();
         if self.bn:
             self.bn1 = torch.nn.BatchNorm1d(size//2);
     
     def forward(self,x):
-        x = F.relu(self.bn1(self.fc1(x)));
-        return self.th(self.fc2(x));        
+        if self.bn:
+            x = F.relu(self.bn1(self.fc1(x)));
+        else:
+            x = F.relu(self.fc1(x));
+        return self.fc2(x);        
         
 class BrenierNet(nn.Module):
     def __init__(self,*args,**kwargs):
@@ -102,10 +108,10 @@ class BrenierNet(nn.Module):
             self.bn = False
         else:
             assert False,'unkown mode of BlendedAtlasNet'
-        self.Yde = nn.ModuleList([Ydecoder(size=self.bottleneck_size,ynum=self.pts_num*4//self.grid_num,bn=self.bn) for i in range(0,self.grid_num)]);
-        self.Hde = nn.ModuleList([Hdecoder(size=self.bottleneck_size,ynum=self.pts_num*4//self.grid_num,bn=self.bn) for i in range(0,self.grid_num)]);
-        self.gradfn = NumGrad();
+        self.Hde = nn.ModuleList([Hdecoder(size=self.bottleneck_size,ynum=self.pts_num*8//self.grid_num,bn=self.bn) for i in range(0,self.grid_num)]);
+        self.Yde = nn.ModuleList([Ydecoder(size=self.bottleneck_size,ynum=self.pts_num*8//self.grid_num) for i in range(0,self.grid_num)]);
         self.brenier = BlockBrenier();
+        self.gradfn = NumGrad();
         self._init_layers()
 
     def forward(self,*input):
@@ -118,10 +124,10 @@ class BrenierNet(nn.Module):
         if len(input) > 1:
             grid = input[1]
         else:
-            grid = self.rand_grid(f)
-        Ys = [];
+            grid = self.rand_grid(f);
         Hs = [];
-        for i in range(0,self.grid_num):
+        Ys = [];
+        for i in range(0,self.grid_num//4):
             Ys.append(self.Yde[i](f));
             Hs.append(self.Hde[i](f));
         yo = self.gradfn(self.brenier,grid,Ys,Hs);
@@ -130,7 +136,7 @@ class BrenierNet(nn.Module):
         grid = grid.transpose(2,1).contiguous()
         out = {}
         out['y'] = yo
-        out['inv_x'] = 0.0
+        out['inv_x'] = grid
         out['grid_x'] = grid
         return out
     
