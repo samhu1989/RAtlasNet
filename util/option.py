@@ -10,6 +10,7 @@ def get_option():
     parser.add_argument('--mode','-md', type=str, default = 'AE',  help='mode');
     parser.add_argument('--pts_num', type=int, default = 2500,  help='number of points')
     parser.add_argument('--grid_num', type=int, default = 1,  help='number of grid')
+    parser.add_argument('--face_num', type=int, default = 5000,  help='number of faces')
     parser.add_argument('--grid_dim', type=int, default = 3,  help='dim of grid')
     parser.add_argument('--grid_ply', type=str, default = '', help='input grid as mesh in ply file')
     parser.add_argument('--dir', type=str, default = '', help='log dir')

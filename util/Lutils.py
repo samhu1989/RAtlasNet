@@ -27,6 +27,7 @@ from .ply import *;
 
 def partial_restore(net,path,keymap={}):
     olddict = torch.load(path);
+    #print(olddict.keys());
     mdict = net.state_dict();
     #print(olddict.keys());
     #print(mdict.keys());
