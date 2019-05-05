@@ -1,4 +1,5 @@
 import math
+import numpy as np;
 from torch import nn
 from torch.autograd import Function
 import torch
@@ -16,8 +17,8 @@ class chamferFunction(Function):
         batchsize, n, _ = xyz1.size()
         _, m, _ = xyz2.size()
 
-        dist1 = torch.zeros(batchsize, n)
-        dist2 = torch.zeros(batchsize, m)
+        dist1 = torch.zeros(batchsize,n)
+        dist2 = torch.zeros(batchsize,m)
 
         idx1 = torch.zeros(batchsize, n).type(torch.IntTensor)
         idx2 = torch.zeros(batchsize, m).type(torch.IntTensor)
@@ -51,4 +52,17 @@ class chamferDist(nn.Module):
 
     def forward(self, input1, input2):
         return chamferFunction.apply(input1, input2)
+        
+def knn(xyz,k,debug=False):
+    batchsize, n, _ = xyz.size()
+    dist = torch.zeros(batchsize,n,k);
+    dist = dist.cuda();
+    idx = torch.zeros(batchsize,n,k,2).type(torch.IntTensor);
+    idx = idx.cuda();
+    k = torch.IntTensor(np.array([k]));
+    chamfer.knn(xyz,k,dist,idx);
+    if debug:
+        print(dist.cpu().numpy());
+        print(idx.cpu().numpy());
+    return idx;
 
