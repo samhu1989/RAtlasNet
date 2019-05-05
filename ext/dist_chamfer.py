@@ -14,7 +14,7 @@ import chamfer
 class chamferFunction(Function):
     @staticmethod
     def forward(ctx, xyz1, xyz2):
-        batchsize, n, _ = xyz1.size()
+        batchsize, n, dim = xyz1.size()
         _, m, _ = xyz2.size()
 
         dist1 = torch.zeros(batchsize,n)
@@ -22,13 +22,16 @@ class chamferFunction(Function):
 
         idx1 = torch.zeros(batchsize, n).type(torch.IntTensor)
         idx2 = torch.zeros(batchsize, m).type(torch.IntTensor)
+        
+        buf = torch.zeros(512,dim).type(torch.FloatTensor)
 
         dist1 = dist1.cuda()
         dist2 = dist2.cuda()
         idx1 = idx1.cuda()
         idx2 = idx2.cuda()
+        buf = buf.cuda();
 
-        chamfer.forward(xyz1, xyz2, dist1, dist2, idx1, idx2)
+        chamfer.forward(xyz1, xyz2, dist1, dist2, idx1, idx2, buf)
         ctx.save_for_backward(xyz1, xyz2, idx1, idx2)
         return dist1, dist2
 
