@@ -18,6 +18,32 @@ sys.path.append("./ext/");
 import dist_chamfer as ext;
 distChamfer =  ext.chamferDist();
 knn = ext.knn;
+flag = 0.0;
+
+def clusterMean(dataset):
+    return np.sum(np.array(dataset)) / len(dataset)
+
+def ecludDist(x, y):
+    return np.sum(np.square(np.array(x) - np.array(y)))
+
+def kMeans(dataset, dist, center, k): 
+    global flag 
+    all_kinds = [] 
+    for _ in range(k): 
+        temp = [] 
+        all_kinds.append(temp) 
+    for i in dataset: 
+        temp = [] 
+        for j in center: 
+            temp.append(dist(i, j)) 
+        all_kinds[temp.index(min(temp))].append(i)
+    flag += 1;
+    center_ = np.array([clusterMean(i) for i in all_kinds]) 
+    if (center_ == center).all() or flag > 20:
+        return center
+    else: 
+        center = center_ 
+        kMeans(dataset, dist, center, k)
 
 class RealTask(Task):
     def __init__(self):
@@ -52,70 +78,17 @@ class RealTask(Task):
         self.train_loss_accs = 0;
         self.eval();
         
-    def sample(self,prob,N):
-        def sample_prob(pos,prob):
-            g = np.linspace(0.0,1.0,N);
-            step = 1.0 / (N-1);
-            xn = pos[0] / step;
-            yn = pos[1] / step;
-            x1 = g[int(xn)];
-            x1w = pos[0] - x1;
-            x2 = g[int(xn)+1];
-            x2w = x2 - pos[0];
-            y1 = g[int(yn)];
-            y1w = pos[1] - y1;
-            y2 = g[int(yn)+1];
-            y2w = y2 - pos[1];
-            pall = np.zeros((25,),dtype=np.float32);
-            for i in range(prob.shape[0]):
-                p1 = prob[i,int(xn),int(yn)];
-                p2 = prob[i,int(xn)+1,int(yn)];
-                p3 = prob[i,int(xn),int(yn)+1];
-                p4 = prob[i,int(xn)+1,int(yn)+1];
-                p12 = ( p1*x2w + p2*x1w ) / (x1w+x2w);
-                p34 = ( p3*x2w + p4*x1w ) / (x1w+x2w);
-                pall[i] = ( p12*y2w + p34*y1w ) / (y1w+y2w);
-            ind = np.argmax(pall)
-            return [pall[ind],float(ind)];
-        samples = np.random.uniform(0.0,1.0,size=[2,2*N]);
-        sampled = [];
-        for i in range(prob.shape[0]):
-            grid_lst = [[]]*int(prob.shape[1]);
-            func = partial(sample_prob,prob=prob[i,...]);
-            sprob = np.apply_along_axis(func,0,samples);
-            ind = np.argsort(sprob[0,...]);
-            for j in range(N):
-                grid_lst[int(sprob[1,ind[j]])].append([samples[0,ind[j]],samples[1,ind[j]]]);
-            for j in range(prob.shape[1]):
-                grid_lst[j] = np.array(grid_lst[j],dtype=np.float32);
-                grid_lst[j] = torch.from_numpy(grid_lst[j]);
-                grid_lst[j] = grid_lst[j].cuda();
-            sampled.append(grid_lst);
-        return sampled;
-        
-    def grid(self,N):
-        g = np.linspace(0.0,1.0,N);
-        x,y = np.meshgrid(g,g);
-        x = x.reshape(-1,1);
-        y = y.reshape(-1,1);
-        grid = np.concatenate((x,y),axis=1);
-        grid = grid.transpose(1,0)
-        return np.repeat(grid.reshape(1,2,-1),self.opt['batchSize'],axis=0);
-        
     def prob(self,pts,N=32):
         with torch.no_grad():
             points = Variable(pts);
-            points = points.transpose(2,1).contiguous();
             points = points.cuda();
-            grid = self.grid(N);
-            grid = torch.from_numpy(grid);
-            grid = grid.type(points.type());
-            out = self.net(points,grid);
-            _,dist2 = distChamfer(points.transpose(2,1).contiguous(),out['y']);
-            d , _ = knn(points.transpose(2,1),1,rdist=True);
-            d = torch.mean(d,dim=1,keepdim=True);
-            d = d.view(d.size(0),1);
-            prob = torch.exp(torch.neg( dist2 / (d/9) )).view(points.size(0),self.net.grid_num,N,N);
+            idx = knn(xyz,self.k_);
+            idx = idx.type(torch.long);
+            nn = xyz[idx[:,:,:,0],idx[:,:,:,1],:];
+            dc = nn.contiguous() - xyz.view(xyz.size(0),xyz.size(1),1,xyz.size(2));
+            v = dc.view(-1,dc.size(2),dc.size(3));
+            var = torch.bmm(v.transpose(1,2),v) / float(self.k_);
+            var = var.contiguous().view(xyz.size(0),-1,9);
         return prob;
         
     def eval(self):
