@@ -35,12 +35,15 @@ def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     out = net(points);
     dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['y']);
     cd = (torch.mean(dist1)) + (torch.mean(dist2))
+    logcd = (torch.mean(torch.log(1e-6+dist1))) + (torch.mean(torch.log(1e-6+dist2)))
     inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
+    loginv = torch.mean(torch.log(1e-6+torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2)));
     cd_meter.update(cd.data.cpu().numpy());
     inv_meter.update(inv_err.data.cpu().numpy())
-    loss = cd + opt['w']*inv_err;
-    if 'reg' in out.keys():
-        loss = loss + opt['w']*out['reg'];
+    if logcd < opt['w']*loginv:
+    	loss = logcd + opt['w']*loginv;
+    else:
+        loss = logcd;
     loss.backward();
     optim.step();
     return loss,cd,inv_err;

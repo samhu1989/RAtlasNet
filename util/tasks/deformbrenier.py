@@ -34,33 +34,42 @@ class RealTask(Task):
         randw = torch.FloatTensor(self.Lw.size());
         randw.uniform_(0.0,1.0);
         randw = self.Lw*randw;
-        randgrid = interp(self.xgrid,self.Li,randw);
-        out = self.net(randgrid,randgrid);
-        y = out['y'];
-        invy = out['inv_x'];
-        rgrid = out['grid_x'];
-        dist1, dist2 = distChamfer(self.gt,y);
-        cd = (torch.mean(dist1)) + (torch.mean(dist2));
-        inv_err = torch.mean(torch.sum((invy - rgrid)**2,dim=2));
-        loss = cd + self.opt['w']*inv_err;
-        self.optim.zero_grad();
-        loss.backward();
-        self.optim.step();
-        self.logtxt.write("#niter:"+str(self.cnt)+" cd:"+str(cd.data.cpu().numpy())+" inv:"+str(inv_err.data.cpu().numpy())+'\n');
+        #randgrid = interp(self.xgrid,self.Li,randw);
+        randgrid = self.xgrid;
+        def closure():
+            self.optim.zero_grad();
+            out = self.net(randgrid,randgrid);
+            y = out['y'];
+            invy = out['inv_x'];
+            rgrid = out['grid_x'];
+            dist1,dist2 = distChamfer(self.gt,y);
+            cd = (torch.mean(dist1)) + (torch.mean(dist2));
+            dist1,dist2 = distChamfer(self.gt,out['ys']);
+            cd2 = (torch.mean(dist1)) + (torch.mean(dist2));
+            inv_err = torch.mean(torch.sum((invy - rgrid)**2,dim=2));
+            mt = torch.mean( out['dirac'](out['grid_x'].transpose(2,1).contiguous()) - out['dirac'](self.gt.transpose(2,1).contiguous()) );
+            if self.cnt < 256:
+                loss = cd2;
+            else:
+                loss = cd2+mt
+            print(self.cnt,cd2.data.cpu().numpy(),mt.data.cpu().numpy());
+            loss.backward();
+            return loss;
+        self.optim.step(closure);
         if self.cnt == 0 or (self.cnt+1) == math.pow(2,math.floor(math.log2(self.cnt+1))) :
+            #self.logtxt.write("niter:"+str(self.cnt)+"cd:"+str(cd.data)+"inv"+str(inv_err.data)+'\n');
             if self.opt['ply']:
                 self.writeply();
         
     def writeply(self):
         out = self.net(self.xgrid,self.xgrid);
         points = out['y'].data.cpu().numpy()[0,...];
-        if not self.opt['grid_ply']:
-            ply_path = self.plydir+os.sep+os.path.basename(self.opt['data']).split('.')[0]+'_sphere_'+'_w%f_gn%d'%(self.opt['w'],self.opt['grid_num']);
-        else:
-            ply_path = self.plydir+os.sep+os.path.basename(self.opt['data']).split('.')[0]+'_'+os.path.basename(self.opt['grid_ply']).split('.')[0]+'_'+'_w%f_gn%d'%(self.opt['w'],self.opt['grid_num']);
+        points2 = out['ys'].data.cpu().numpy()[0,...];
+        ply_path = self.plydir+os.sep+os.path.basename(self.opt['data']).split('.')[0]+'_w%f_gn%d'%(self.opt['w'],self.opt['grid_num']);
         if not os.path.exists(ply_path):
             os.mkdir(ply_path);
         write_ply(ply_path+os.sep+'iter%03d.ply'%(self.cnt),points = pd.DataFrame(points),faces=pd.DataFrame(self.plyface));
+        write_ply(ply_path+os.sep+'iter%03d_s.ply'%(self.cnt),points = pd.DataFrame(points2));
         
     def loadData(self):
         # GT
@@ -90,7 +99,7 @@ class RealTask(Task):
         self.Li = Li;
     
     def createOptim(self):
-        self.optim = optim.Adam(self.net.parameters(),lr = self.opt['lr'],weight_decay=self.opt['weight_decay']);
+        self.optim = optim.Adam(self.net.parameters(),lr = self.opt['lr']);
         
 
         

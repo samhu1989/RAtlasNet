@@ -34,13 +34,14 @@ def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     points = points.cuda();
     out = net(points);
     dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['y']);
-    cd = (torch.mean(dist1)) + (torch.mean(dist2))
+    cd = torch.mean(dist1) + torch.mean(dist2)
     inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
     cd_meter.update(cd.data.cpu().numpy());
     inv_meter.update(inv_err.data.cpu().numpy())
-    loss = cd + opt['w']*inv_err;
-    if 'reg' in out.keys():
-        loss = loss + opt['w']*out['reg'];
+    if cd < opt['w']*inv_err:
+    	loss = cd + opt['w']*inv_err;
+    else:
+        loss = cd;
     loss.backward();
     optim.step();
     return loss,cd,inv_err;
@@ -219,7 +220,10 @@ class RealTask(Task):
         self.train_inv = AverageValueMeter();
         self.valid_cd = AverageValueMeter();
         self.valid_inv = AverageValueMeter();
-        self.optim = optim.Adam(self.net.parameters(),lr=self.opt['lr'],weight_decay=self.opt['weight_decay']);
+        param = [];
+        param.extend(self.net.parameters());
+        #param.extend(self.net.inv_decoder.parameters());
+        self.optim = optim.Adam(param,lr=self.opt['lr'],weight_decay=self.opt['weight_decay']);
         for group in self.optim.param_groups:
             group.setdefault('initial_lr', group['lr']);
         self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim,40,eta_min=0,last_epoch=self.opt['last_epoch']);

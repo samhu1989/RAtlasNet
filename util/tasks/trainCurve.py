@@ -5,6 +5,7 @@ from ..ply import *;
 from ..Lutils import *;
 from ..utils import *;
 from ..datasets import *;
+from ..cmap import *;
 import torch;
 from torch.autograd import Variable;
 from torch.utils.data import DataLoader;
@@ -24,8 +25,8 @@ def eval_ae(net,pts):
         out = net(points);
         dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['y']);
         cd = (torch.mean(dist1)) + (torch.mean(dist2))
-        inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
-    return cd.data.cpu().numpy(),inv_err.data.cpu().numpy();
+        #inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
+    return cd.data.cpu().numpy(),cd.data.cpu().numpy();
 
 def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     optim.zero_grad();
@@ -33,17 +34,15 @@ def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     points = points.transpose(2,1).contiguous();
     points = points.cuda();
     out = net(points);
-    dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['y']);
-    cd = (torch.mean(dist1)) + (torch.mean(dist2))
-    inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
-    cd_meter.update(cd.data.cpu().numpy());
-    inv_meter.update(inv_err.data.cpu().numpy())
-    loss = cd + opt['w']*inv_err;
-    if 'reg' in out.keys():
-        loss = loss + opt['w']*out['reg'];
+    gt = points.transpose(2,1).contiguous();
+    gtcurve = net.curve(gt);
+    gtall = torch.cat([gt,gtcurve],dim=2).contiguous();
+    dist1, dist2 = distChamfer(gtall,out['yall']);
+    loss = (torch.mean(dist1)) + (torch.mean(dist2));
+    cd_meter.update(loss.data.cpu().numpy());
     loss.backward();
     optim.step();
-    return loss,cd,inv_err;
+    return loss,loss,loss;
     
 def eval_svr(net,pts,img):
     with torch.no_grad():
@@ -142,14 +141,14 @@ def view_ae(dirname,net,pts,index,cat,opt):
     points = points.cuda();
     grid = None;
     fidx = None;
-    if opt.grid_dim == 3:
-        grid,Li,Lw,fidx = sphere_grid(points.size()[0],opt.pts_num,'cot');
-    elif opt.grid_dim == 2:
-        grid,Li,Lw,fidx = patch_grid(points.size()[0],opt.pts_num,opt.grid_num);
+    if opt['grid_dim'] == 3:
+        grid,Li,Lw,fidx = sphere_grid(points.size()[0],opt['pts_num'],'cot');
+    elif opt['grid_dim'] == 2:
+        grid,Li,Lw,fidx = patch_grid(points.size()[0],opt['pts_num'],opt['grid_num']);
     grid = Variable(grid,volatile=True);
     grid = grid.cuda();
-    y,inv_err  = net(points,grid);
-    y_inv = net.inv_y;
+    out  = net(points,grid);
+    y = out['y'];
     ply_path = dirname+os.sep+'ply';
     if not os.path.exists(ply_path):
         os.mkdir(ply_path);
@@ -158,13 +157,12 @@ def view_ae(dirname,net,pts,index,cat,opt):
     for i in range(fidx.shape[0]):
         face[i] = (3,fidx[i,0],fidx[i,1],fidx[i,2]);
     y = y.cpu().data.numpy();
-    inv_y = net.inv_y.cpu().data.numpy();
-    grid = grid.transpose(2,1).contiguous().cpu().data.numpy();
-    c = colorcoord(grid[0,...])
-    write_ply(ply_path+os.sep+'%02d_%s_grid.ply'%(index,cat[0]),points = view_color(grid[0,...],c),faces=pd.DataFrame(face),color=True);
+    gt = points.transpose(2,1).contiguous();
+    gt = gt.cpu().data.numpy();
+    c = colorindex(y[0,...],opt['grid_num']);
     for i in range(y.shape[0]):
+        write_ply(ply_path+os.sep+'%02d_%02d_%s_gt.ply'%(index,i,cat[0]),points = pd.DataFrame(gt[i,...]));
         write_ply(ply_path+os.sep+'%02d_%02d_%s.ply'%(index,i,cat[0]),points = view_color(y[i,...],c),faces=pd.DataFrame(face),color=True);
-        write_ply(ply_path+os.sep+'%02d_%02d_%s_inv.ply'%(index,i,cat[0]),points = view_color(inv_y[i,...],c),faces=pd.DataFrame(face),color=True);
         
 def view_svr(dirname,net,img,index,cat,opt):
     img = Variable(img,volatile=True);
@@ -243,6 +241,8 @@ class RealTask(Task):
                 cd,inv = eval_svr(self.net,points,img);
             else:
                 cd,inv = eval_ae(self.net,points);
+                if self.opt['ply']:
+                    view_ae(self.tskdir,self.net,points,i,cat,self.opt);
             self.valid_cd.update(cd);
             self.valid_inv.update(inv);
             self.valid_data.perCatValueMeter[cat[0]].update(cd);

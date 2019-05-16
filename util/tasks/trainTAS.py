@@ -22,10 +22,11 @@ def eval_ae(net,pts):
         points = points.transpose(2,1).contiguous();
         points = points.cuda();
         out = net(points);
-        dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['y']);
-        cd = (torch.mean(dist1)) + (torch.mean(dist2))
-        inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
-    return cd.data.cpu().numpy(),inv_err.data.cpu().numpy();
+        dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['yv']);
+        cdv = (torch.mean(dist1)) + (torch.mean(dist2))
+        dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['yf']);
+        cdf = (torch.mean(dist1)) + (torch.mean(dist2))
+    return cdv.data.cpu().numpy(),cdf.data.cpu().numpy();
 
 def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     optim.zero_grad();
@@ -33,17 +34,17 @@ def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     points = points.transpose(2,1).contiguous();
     points = points.cuda();
     out = net(points);
-    dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['y']);
-    cd = (torch.mean(dist1)) + (torch.mean(dist2))
-    inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
-    cd_meter.update(cd.data.cpu().numpy());
-    inv_meter.update(inv_err.data.cpu().numpy())
-    loss = cd + opt['w']*inv_err;
-    if 'reg' in out.keys():
-        loss = loss + opt['w']*out['reg'];
+    dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['yv']);
+    cdv = (torch.mean(dist1)) + (torch.mean(dist2))
+    dist1, dist2 = distChamfer(points.transpose(2,1).contiguous(),out['yf']);
+    cdf = (torch.mean(dist1)) + (torch.mean(dist2))
+    reg = out['reg'];
+    cd_meter.update(cdv.data.cpu().numpy());
+    inv_meter.update(cdf.data.cpu().numpy());
+    loss = cdv+0.5*cdf+opt['w']*reg;
     loss.backward();
     optim.step();
-    return loss,cd,inv_err;
+    return loss,cdv,cdf;
     
 def eval_svr(net,pts,img):
     with torch.no_grad():
@@ -76,15 +77,15 @@ def train_svr(net,optim,cd_meter,inv_meter,pts,img,opt):
     
 def write_log(logfile,val_cd,val_inv,dataset_test,train_cd=None,train_inv=None,epoch=None):
     log_dict = {};
-    log_dict['val_cd'] = val_cd.avg;
-    log_dict['val_inv'] = val_inv.avg;
+    log_dict['val_cdv'] = val_cd.avg;
+    log_dict['val_cdf'] = val_inv.avg;
     for item in dataset_test.cat:
         print(item,dataset_test.perCatValueMeter[item].avg)
         log_dict.update({item:dataset_test.perCatValueMeter[item].avg})
     if train_cd is not None:
-        log_dict['train_cd'] = train_cd.avg;
+        log_dict['train_cdv'] = train_cd.avg;
     if train_inv is not None:
-        log_dict['train_inv'] = train_inv.avg;
+        log_dict['train_cdf'] = train_inv.avg;
     if epoch is not None:
         log_dict['epoch'] = epoch;
     logfile.write('json_stats: '+json.dumps(log_dict)+'\n');
@@ -219,7 +220,7 @@ class RealTask(Task):
         self.train_inv = AverageValueMeter();
         self.valid_cd = AverageValueMeter();
         self.valid_inv = AverageValueMeter();
-        self.optim = optim.Adam(self.net.parameters(),lr=self.opt['lr'],weight_decay=self.opt['weight_decay']);
+        self.optim = optim.Adam(self.net.decoder.parameters(),lr=self.opt['lr'],weight_decay=self.opt['weight_decay']);
         for group in self.optim.param_groups:
             group.setdefault('initial_lr', group['lr']);
         self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim,40,eta_min=0,last_epoch=self.opt['last_epoch']);

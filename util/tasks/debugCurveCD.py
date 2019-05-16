@@ -7,10 +7,9 @@ import torch;
 from torch.autograd import Variable
 import torch.nn as nn
 import math;
+from .CurveCD import CurveCDLoss;
 
-sys.path.append("./ext/");
-import dist_chamfer as ext;
-distChamfer =  ext.chamferDist();
+dist = CurveCDLoss();
 
 class RealTask(Task):
     def __init__(self):
@@ -39,8 +38,7 @@ class RealTask(Task):
         y = out['y'];
         invy = out['inv_x'];
         rgrid = out['grid_x'];
-        dist1, dist2 = distChamfer(self.gt,y);
-        cd = (torch.mean(dist1)) + (torch.mean(dist2));
+        cd = dist(self.gt,y);
         inv_err = torch.mean(torch.sum((invy - rgrid)**2,dim=2));
         loss = cd + self.opt['w']*inv_err;
         self.optim.zero_grad();
@@ -91,10 +89,3 @@ class RealTask(Task):
     
     def createOptim(self):
         self.optim = optim.Adam(self.net.parameters(),lr = self.opt['lr'],weight_decay=self.opt['weight_decay']);
-        
-
-        
-        
-        
-
-        

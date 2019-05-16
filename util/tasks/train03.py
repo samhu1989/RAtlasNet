@@ -39,8 +39,6 @@ def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     cd_meter.update(cd.data.cpu().numpy());
     inv_meter.update(inv_err.data.cpu().numpy())
     loss = cd + opt['w']*inv_err;
-    if 'reg' in out.keys():
-        loss = loss + opt['w']*out['reg'];
     loss.backward();
     optim.step();
     return loss,cd,inv_err;
@@ -219,7 +217,11 @@ class RealTask(Task):
         self.train_inv = AverageValueMeter();
         self.valid_cd = AverageValueMeter();
         self.valid_inv = AverageValueMeter();
-        self.optim = optim.Adam(self.net.parameters(),lr=self.opt['lr'],weight_decay=self.opt['weight_decay']);
+        param=[];
+        param.extend(self.net.wdecoder.parameters());
+        param.extend(self.net.decoder.parameters());
+        param.extend(self.net.inv_decoder.parameters());
+        self.optim = optim.SGD(param,lr=self.opt['lr'],weight_decay=self.opt['weight_decay']);
         for group in self.optim.param_groups:
             group.setdefault('initial_lr', group['lr']);
         self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim,40,eta_min=0,last_epoch=self.opt['last_epoch']);
@@ -276,4 +278,4 @@ class RealTask(Task):
         save_model(self.logtxt,self.tskdir,self.net,self.opt,self.valid_cd.avg,self.valid_cd.avg+self.opt['w']*self.valid_inv.avg);
     
     def createOptim(self):
-        self.optim = optim.Adam(self.net.parameters(),lr = self.opt['lr'],weight_decay=self.opt['weight_decay']);
+        self.optim = optim.SGD(self.net.parameters(),lr = self.opt['lr'],weight_decay=self.opt['weight_decay']);

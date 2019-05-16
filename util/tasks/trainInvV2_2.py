@@ -38,9 +38,10 @@ def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
     cd_meter.update(cd.data.cpu().numpy());
     inv_meter.update(inv_err.data.cpu().numpy())
-    loss = cd + opt['w']*inv_err;
-    if 'reg' in out.keys():
-        loss = loss + opt['w']*out['reg'];
+    inv_gt = out['invmap'](points);
+    dist1, dist2 = distChamfer(inv_gt,out['grid_x']);
+    inv_cd = (torch.mean(dist1)) + (torch.mean(dist2))
+    loss = inv_cd + opt['w']*inv_err + cd;
     loss.backward();
     optim.step();
     return loss,cd,inv_err;

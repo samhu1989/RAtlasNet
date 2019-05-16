@@ -37,13 +37,11 @@ def train_ae(net,optim,cd_meter,inv_meter,pts,opt):
     cd = (torch.mean(dist1)) + (torch.mean(dist2))
     inv_err = torch.mean(torch.sum((out['inv_x'] - out['grid_x'])**2,dim=2));
     cd_meter.update(cd.data.cpu().numpy());
-    inv_meter.update(inv_err.data.cpu().numpy())
-    loss = cd + opt['w']*inv_err;
-    if 'reg' in out.keys():
-        loss = loss + opt['w']*out['reg'];
+    inv_meter.update(out['reg'].data.cpu().numpy())
+    loss = cd + opt['w']*out['reg'];
     loss.backward();
     optim.step();
-    return loss,cd,inv_err;
+    return loss,cd,out['reg'];
     
 def eval_svr(net,pts,img):
     with torch.no_grad():
