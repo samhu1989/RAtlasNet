@@ -2,6 +2,7 @@ import argparse
 def get_option():
     parser = argparse.ArgumentParser();
     parser.add_argument('--net','-net',type=str,default='BlendedAtlasNet',help='network name')
+    parser.add_argument('--p2v','-p2v',type=str,default='P2V',help='point to voxel')
     parser.add_argument('--batchSize','-bs',type=int,default=32,help='input batch size')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=6)
     parser.add_argument('--nepoch', type=int, default=400, help='number of epochs to train for')

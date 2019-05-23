@@ -73,4 +73,41 @@ def minmax(x):
 def colorcoord(coord):
     xyz = coord.copy()
     return np.apply_along_axis(minmax,0,xyz).reshape((-1,3)).astype(np.uint8);
+
+color = np.array([
+[255,165,0],
+[84,139,84],
+[255,246,143],
+[255,228,196],
+[230,230,250],
+[100,149,237],
+[132,112,255],
+[0,191,255],#
+[0,255,255],
+[127,255,212],
+[60,179,113],
+[188,143,143],
+[244,164,96],#
+[255,192,203],
+[193,205,193],
+[105,139,34],#
+[238,238,209],
+[255,48,48],
+[238,154,0],
+[224,102,255],#
+[155,48,255],
+[144,238,144],
+[139,0,0],
+[0,139,139],
+[176,48,96]
+],dtype=np.uint8);
+ 
+def colorindex(coord,num):
+    N = coord.shape[0];
+    step = N // num;
+    idx = np.array([(x // step) for x in range(N)],dtype=np.int32);
+    return color[idx,:];
+    
+def colorbyindex(idx):
+    return color[idx,:].reshape(-1,3);
     

@@ -5,6 +5,7 @@ from ..ply import *;
 from ..Lutils import *;
 from ..utils import *;
 from ..datasets import *;
+from ..sample import reject_sample;
 import torch;
 from torch.autograd import Variable;
 from torch.utils.data import DataLoader;
@@ -13,11 +14,52 @@ import math;
 import json;
 import numpy as np;
 from functools import partial;
+import matplotlib;
+matplotlib.use('Agg');
+import matplotlib.pyplot as plt;
 
 sys.path.append("./ext/");
 import dist_chamfer as ext;
 distChamfer =  ext.chamferDist();
 knn = ext.knn;
+from PIL import Image;
+from ..cmap import *;
+
+def view_color(y,c=None):
+    if c is None:
+        c = colorcoord(y);
+    return pd.concat([pd.DataFrame(y),pd.DataFrame(c)],axis=1,ignore_index=True);
+
+def view_ae(dirname,net,pts,index,cat,opt):
+    grid = None;
+    fidx = None;
+    with torch.no_grad():
+        points = Variable(pts);
+        points = points.transpose(2,1).contiguous();
+        points = points.cuda();
+        if opt['grid_dim'] == 3:
+            grid,Li,Lw,fidx = sphere_grid(points.size()[0],opt['pts_num'],'cot');
+        elif opt['grid_dim'] == 2:
+            grid,Li,Lw,fidx = patch_grid(points.size()[0],opt['pts_num'],opt['grid_num']);
+        grid = Variable(grid);
+        grid = grid.cuda();
+        out  = net(points,grid);
+    y = out['y'];
+    ply_path = dirname+os.sep+'ply';
+    if not os.path.exists(ply_path):
+        os.mkdir(ply_path);
+    T=np.dtype([("n",np.uint8),("i0",np.int32),('i1',np.int32),('i2',np.int32)]);
+    face = np.zeros(shape=[fidx.shape[0]],dtype=T);
+    for i in range(fidx.shape[0]):
+        face[i] = (3,fidx[i,0],fidx[i,1],fidx[i,2]);
+    y = y.cpu().data.numpy();
+    gt = points.transpose(2,1).contiguous();
+    gt = gt.cpu().data.numpy();
+    c = colorindex(y[0,...],opt['grid_num']);
+    for i in range(y.shape[0]):
+        write_ply(ply_path+os.sep+'%02d_%02d_%s_gt.ply'%(index,i,cat[0]),points = pd.DataFrame(gt[i,...]));
+        write_ply(ply_path+os.sep+'%02d_%02d_%s.ply'%(index,i,cat[0]),points = view_color(y[i,...],c),faces=pd.DataFrame(face),color=True);
+
 
 class RealTask(Task):
     def __init__(self):
@@ -52,47 +94,6 @@ class RealTask(Task):
         self.train_loss_accs = 0;
         self.eval();
         
-    def sample(self,prob,N):
-        def sample_prob(pos,prob):
-            g = np.linspace(0.0,1.0,N);
-            step = 1.0 / (N-1);
-            xn = pos[0] / step;
-            yn = pos[1] / step;
-            x1 = g[int(xn)];
-            x1w = pos[0] - x1;
-            x2 = g[int(xn)+1];
-            x2w = x2 - pos[0];
-            y1 = g[int(yn)];
-            y1w = pos[1] - y1;
-            y2 = g[int(yn)+1];
-            y2w = y2 - pos[1];
-            pall = np.zeros((25,),dtype=np.float32);
-            for i in range(prob.shape[0]):
-                p1 = prob[i,int(xn),int(yn)];
-                p2 = prob[i,int(xn)+1,int(yn)];
-                p3 = prob[i,int(xn),int(yn)+1];
-                p4 = prob[i,int(xn)+1,int(yn)+1];
-                p12 = ( p1*x2w + p2*x1w ) / (x1w+x2w);
-                p34 = ( p3*x2w + p4*x1w ) / (x1w+x2w);
-                pall[i] = ( p12*y2w + p34*y1w ) / (y1w+y2w);
-            ind = np.argmax(pall)
-            return [pall[ind],float(ind)];
-        samples = np.random.uniform(0.0,1.0,size=[2,2*N]);
-        sampled = [];
-        for i in range(prob.shape[0]):
-            grid_lst = [[]]*int(prob.shape[1]);
-            func = partial(sample_prob,prob=prob[i,...]);
-            sprob = np.apply_along_axis(func,0,samples);
-            ind = np.argsort(sprob[0,...]);
-            for j in range(N):
-                grid_lst[int(sprob[1,ind[j]])].append([samples[0,ind[j]],samples[1,ind[j]]]);
-            for j in range(prob.shape[1]):
-                grid_lst[j] = np.array(grid_lst[j],dtype=np.float32);
-                grid_lst[j] = torch.from_numpy(grid_lst[j]);
-                grid_lst[j] = grid_lst[j].cuda();
-            sampled.append(grid_lst);
-        return sampled;
-        
     def grid(self,N):
         g = np.linspace(0.0,1.0,N);
         x,y = np.meshgrid(g,g);
@@ -126,8 +127,22 @@ class RealTask(Task):
         self.net.eval();
         for i, data in enumerate(self.valid_load, 0):
             img, points, cat, a, name = data;
+            if cat[0] != 'chair':
+                continue;
             prob = self.prob(points);
-            sampled = self.sample(prob.cpu().numpy(),self.net.pts_num);
+            view_ae(self.tskdir,self.net,points,i,cat,self.opt);
+            probnp = prob.cpu().numpy();
+            fig,axes = plt.subplots(5,5,figsize=(20.48,20.48));
+            for j in range(prob.size(1)):
+                p = probnp[0,j,...]; 
+                img = Image.fromarray((255*p).astype('uint8'));
+                x = reject_sample(p,self.opt['pts_num']//self.opt['grid_num']);
+                x = 31*x;
+                ax = axes[j//5,j%5];
+                ax.imshow(img);
+                ax.plot(x[0,...],x[1,...],'ro');
+            plt.savefig(self.tskdir+os.sep+'ply'+os.sep+'p_%d'%i+'.png');
+            plt.close(fig);
             break;
 
     def load_pretrain(self):
