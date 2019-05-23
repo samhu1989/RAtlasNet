@@ -22,16 +22,13 @@ class chamferFunction(Function):
 
         idx1 = torch.zeros(batchsize, n).type(torch.IntTensor)
         idx2 = torch.zeros(batchsize, m).type(torch.IntTensor)
-        
-        buf = torch.zeros(512,dim).type(torch.FloatTensor)
 
         dist1 = dist1.cuda()
         dist2 = dist2.cuda()
         idx1 = idx1.cuda()
         idx2 = idx2.cuda()
-        buf = buf.cuda();
 
-        chamfer.forward(xyz1, xyz2, dist1, dist2, idx1, idx2, buf)
+        chamfer.forward(xyz1, xyz2, dist1, dist2, idx1, idx2)
         ctx.save_for_backward(xyz1, xyz2, idx1, idx2)
         return dist1, dist2
 
@@ -56,7 +53,7 @@ class chamferDist(nn.Module):
     def forward(self, input1, input2):
         return chamferFunction.apply(input1, input2)
         
-def knn(xyz,k,debug=False):
+def knn(xyz,k,debug=False,rdist=False):
     batchsize, n, _ = xyz.size()
     dist = torch.zeros(batchsize,n,k);
     dist = dist.cuda();
@@ -67,5 +64,8 @@ def knn(xyz,k,debug=False):
     if debug:
         print(dist.cpu().numpy());
         print(idx.cpu().numpy());
-    return idx;
+    if rdist:
+        return dist,idx;
+    else:
+        return idx;
 

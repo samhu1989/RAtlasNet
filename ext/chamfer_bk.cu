@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <ATen/ATen.h>
 
@@ -6,10 +7,7 @@
 
 #include <vector>
 
-__global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,int m,const float * xyz2,float * result,int * result_i){
-	const int batch=512;
-	__shared__ float buf[batch*16];
-    assert( dim <= 16 );
+__global__ void NmDistanceKernel(int b,int n,const int dim,const float * xyz,int m,const float * xyz2,float * result,int * result_i,const int batch,float* buf){
 	for (int i=blockIdx.x;i<b;i+=gridDim.x){
 		for (int k2=0;k2<m;k2+=batch){
 			int end_k=min(m,k2+batch)-k2;
@@ -18,7 +16,7 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 			}
 			__syncthreads();
 			for (int j=threadIdx.x+blockIdx.y*blockDim.x;j<n;j+=blockDim.x*gridDim.y){
-				const float* xyz1= &(xyz[(i*n+j)*dim]) ;
+				const float* xyz1 = &(xyz[(i*n+j)*dim]);
 				int best_i=0;
 				float best=0;
 				int end_ka=end_k-(end_k&3);
@@ -26,9 +24,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 					for (int k=0;k<batch;k+=4){
 						{
                             float d = 0.0;
-                            for(int di=0;di<dim;++di)
-							{
-                                float dif=buf[k*dim+di]-xyz1[di];
+							for(int di=0;di<dim;++di)
+                            {
+                                float dif = buf[k*dim+di] - xyz1[di];
                                 d += dif*dif;
                             }
 							if (k==0 || d<best){
@@ -38,9 +36,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 						}
 						{
                             float d = 0.0;
-                            for(int di=0;di<dim;++di)
-							{
-                                float dif=buf[(k+1)*dim+di]-xyz1[di];
+							for(int di=0;di<dim;++di)
+                            {
+                                float dif = buf[(k+1)*dim+di] - xyz1[di];
                                 d += dif*dif;
                             }
 							if (d<best){
@@ -50,9 +48,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 						}
 						{
                             float d = 0.0;
-                            for(int di=0;di<dim;++di)
-							{
-                                float dif=buf[(k+2)*dim+di]-xyz1[di];
+							for(int di=0;di<dim;++di)
+                            {
+                                float dif = buf[(k+2)*dim+di] - xyz1[di];
                                 d += dif*dif;
                             }
 							if (d<best){
@@ -62,9 +60,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 						}
 						{
                             float d = 0.0;
-                            for(int di=0;di<dim;++di)
-							{
-                                float dif=buf[(k+3)*dim+di]-xyz1[di];
+							for(int di=0;di<dim;++di)
+                            {
+                                float dif = buf[(k+3)*dim+di] - xyz1[di];
                                 d += dif*dif;
                             }
 							if (d<best){
@@ -77,9 +75,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 					for (int k=0;k<end_ka;k+=4){
 						{
                             float d = 0.0;
-                            for(int di=0;di<dim;++di)
-							{
-                                float dif=buf[k*dim+di]-xyz1[di];
+							for(int di=0;di<dim;++di)
+                            {
+                                float dif = buf[k*dim+di] - xyz1[di];
                                 d += dif*dif;
                             }
 							if (k==0 || d<best){
@@ -89,9 +87,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 						}
 						{
                             float d = 0.0;
-                            for(int di=0;di<dim;++di)
-							{
-                                float dif=buf[(k+1)*dim+di]-xyz1[di];
+							for(int di=0;di<dim;++di)
+                            {
+                                float dif = buf[(k+1)*dim+di] - xyz1[di];
                                 d += dif*dif;
                             }
 							if (d<best){
@@ -101,9 +99,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 						}
 						{
                             float d = 0.0;
-                            for(int di=0;di<dim;++di)
-							{
-                                float dif=buf[(k+2)*dim+di]-xyz1[di];
+							for(int di=0;di<dim;++di)
+                            {
+                                float dif = buf[(k+2)*dim+di] - xyz1[di];
                                 d += dif*dif;
                             }
 							if (d<best){
@@ -113,9 +111,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 						}
 						{
                             float d = 0.0;
-                            for(int di=0;di<dim;++di)
-							{
-                                float dif=buf[(k+3)*dim+di]-xyz1[di];
+							for(int di=0;di<dim;++di)
+                            {
+                                float dif = buf[(k+3)*dim+di] - xyz1[di];
                                 d += dif*dif;
                             }
 							if (d<best){
@@ -127,9 +125,9 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 				}
 				for (int k=end_ka;k<end_k;k++){
                     float d = 0.0;
-                    for(int di=0;di<dim;++di)
+					for(int di=0;di<dim;++di)
                     {
-                        float dif=buf[k*dim+di]-xyz1[di];
+                        float dif = buf[k*dim+di] - xyz1[di];
                         d += dif*dif;
                     }
 					if (k==0 || d<best){
@@ -147,19 +145,19 @@ __global__ void NmDistanceKernel(int b,int n, const int dim,const float * xyz,in
 	}
 }
 // int chamfer_cuda_forward(int b,int n,const float * xyz,int m,const float * xyz2,float * result,int * result_i,float * result2,int * result2_i, cudaStream_t stream){
-int chamfer_cuda_forward(at::Tensor xyz1, at::Tensor xyz2, at::Tensor dist1, at::Tensor dist2, at::Tensor idx1, at::Tensor idx2){
+int chamfer_cuda_forward(at::Tensor xyz1, at::Tensor xyz2, at::Tensor dist1, at::Tensor dist2,at::Tensor idx1,at::Tensor idx2,at::Tensor buf){
 
 	const auto batch_size = xyz1.size(0);
 	const auto n = xyz1.size(1); //num_points point cloud A
-	const auto m = xyz2.size(1); //num_points point cloud B
     const auto dim = xyz1.size(2);
-    if( dim != xyz2.size(2) ){
+	const auto m = xyz2.size(1); //num_points point cloud B
+    const auto buf_batch_size = buf.size(0);
+    if( (dim != xyz2.size(2)) || (dim != buf.size(1)) ){
         printf("dim do not match in chamfer_cuda_forward\n");
         return 0;
     }
-
-	NmDistanceKernel<<<dim3(32,16,1),512>>>(batch_size, n, dim, xyz1.data<float>(), m, xyz2.data<float>(), dist1.data<float>(), idx1.data<int>());
-	NmDistanceKernel<<<dim3(32,16,1),512>>>(batch_size, m, dim, xyz2.data<float>(), n, xyz1.data<float>(), dist2.data<float>(), idx2.data<int>());
+	NmDistanceKernel<<<dim3(32,16,1),512>>>(batch_size, n, dim, xyz1.data<float>(), m, xyz2.data<float>(), dist1.data<float>(), idx1.data<int>() , buf_batch_size , buf.data<float>());
+	NmDistanceKernel<<<dim3(32,16,1),512>>>(batch_size, m, dim, xyz2.data<float>(), n, xyz1.data<float>(), dist2.data<float>(), idx2.data<int>() , buf_batch_size , buf.data<float>());
 
 	cudaError_t err = cudaGetLastError();
 	  if (err != cudaSuccess) {
@@ -168,15 +166,13 @@ int chamfer_cuda_forward(at::Tensor xyz1, at::Tensor xyz2, at::Tensor dist1, at:
 	    return 0;
 	  }
 	  return 1;
-
-
 }
 __global__ void NmDistanceGradKernel(int b,int n,const int dim,const float * xyz1,int m,const float * xyz2,const float * grad_dist1,const int * idx1,float * grad_xyz1,float * grad_xyz2){
 	for (int i=blockIdx.x;i<b;i+=gridDim.x){
 		for (int j=threadIdx.x+blockIdx.y*blockDim.x;j<n;j+=blockDim.x*gridDim.y){
             int j2=idx1[i*n+j];
             float g=grad_dist1[i*n+j]*2;
-            for(int di=0;di<dim;++di)
+            for(int di = 0;di<dim;++di)
 			{
                 float x1=xyz1[(i*n+j)*dim+di];
                 float x2=xyz2[(i*m+j2)*dim+di];
@@ -193,13 +189,12 @@ int chamfer_cuda_backward(at::Tensor xyz1, at::Tensor xyz2, at::Tensor gradxyz1,
 	
 	const auto batch_size = xyz1.size(0);
 	const auto n = xyz1.size(1); //num_points point cloud A
-	const auto m = xyz2.size(1); //num_points point cloud B
     const auto dim = xyz1.size(2);
-    if( dim != xyz2.size(2) ){
-        printf("dim do not match in chamfer_cuda_forward\n");
+	const auto m = xyz2.size(1); //num_points point cloud B
+    if(dim != xyz2.size(2)){
+        printf("dim do not match in chamfer_cuda_backward\n");
         return 0;
     }
-
 	NmDistanceGradKernel<<<dim3(1,16,1),256>>>(batch_size,n,dim,xyz1.data<float>(),m,xyz2.data<float>(),graddist1.data<float>(),idx1.data<int>(),gradxyz1.data<float>(),gradxyz2.data<float>());
 	NmDistanceGradKernel<<<dim3(1,16,1),256>>>(batch_size,m,dim,xyz2.data<float>(),n,xyz1.data<float>(),graddist2.data<float>(),idx2.data<int>(),gradxyz2.data<float>(),gradxyz1.data<float>());
 	
@@ -324,7 +319,6 @@ __global__ void KnnKernel(int b,const int n,const int dim,const float * xyz,cons
         }
     }
 }
-
 int knn_cuda(at::Tensor xyz,at::Tensor k,at::Tensor dist,at::Tensor idx)
 {
     const auto bs = xyz.size(0);
@@ -339,5 +333,4 @@ int knn_cuda(at::Tensor xyz,at::Tensor k,at::Tensor dist,at::Tensor idx)
 	  }
 	  return 1;
 }
-
 
