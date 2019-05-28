@@ -31,4 +31,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("forward", &chamfer_forward, "chamfer forward (CUDA)");
   m.def("backward", &chamfer_backward, "chamfer backward (CUDA)");
   m.def("knn", &knn, "knn (CUDA)");
+  m.def("interp_forward",&interp_forward,"bilinear interp (CUDA)");
+  m.def("interp_backward",&interp_backward,"bilinear interp (CUDA)");
 }

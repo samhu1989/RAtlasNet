@@ -69,3 +69,35 @@ def knn(xyz,k,debug=False,rdist=False):
     else:
         return idx;
 
+class interpFunction(Function):
+    @staticmethod
+    def forward(ctx,z,prob):
+        b,p,dim,L = z.size();
+        b1,p1,M,N = prob.size();
+        assert dim == 2,'this implementation only carries out interpolation in 2D';
+        assert b == b1,'the input have different batch size %d and %d'%(b,b1);
+        assert p == p1,'the input have different patch number %d and %d'%(p,p1);
+        #
+        idx = torch.zeros(b,p,2,4,L).type(torch.IntTensor);
+        idx = idx.cuda();
+        w = torch.zeros(b,p,4,L).type(torch.FloatTensor);
+        w = w.cuda();
+        p = torch.zeros(b,p,L).type(torch.FloatTensor);
+        p = p.cuda();
+        chamfer.interp_forward(z,prob,idx,w,p);
+        ctx.save_for_backward(z,prob,idx,w);
+        return p;
+
+    @staticmethod
+    def backward(ctx,grad):
+        z,prob,idx,w = ctx.saved_tensors;
+        b,p,dim,L = z.size();
+        b1,p1,M,N = prob.size();
+        assert dim == 2,'this implementation only carries out interpolation in 2D';
+        assert b == b1,'the input have different batch size %d and %d'%(b,b1);
+        assert p == p1,'the input have different patch number %d and %d'%(p,p1);
+        gradz = torch.zeros_like(z);
+        gradp = torch.zeros_like(z);
+        chamfer.interp_backward(grad,idx,w,gradp);
+        return gradz,gradp ;
+
