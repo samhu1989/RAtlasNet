@@ -340,4 +340,110 @@ int knn_cuda(at::Tensor xyz,at::Tensor k,at::Tensor dist,at::Tensor idx)
 	  return 1;
 }
 
+__global__ void interpKernel(const int b, const int p,const int L,const int H,const int W,const float* z,const float* prob,int* idx,float* w,float* p)
+{
+    float stepy = 1.0 / float(H - 1);
+    float stepx = 1.0 / float(W - 1);
+    for ( int bi = blockIdx.x ; bi < b ; bi += gridDim.x )
+        for ( int pi = blockIdx.y; pi < p ; pi += gridDim.y )
+            for ( int li = threadIdx.x; li < L ; li += blockDim.x )
+            {
+                float zx = z[((bi*p+pi)*2+0)*L+li];
+                float zy = z[((bi*p+pi)*2+1)*L+li];
+                if( zx < 0.0 || zy < 0.0 || zx >= 1.0 || zy >= 1.0 )
+                {
+                    p[(bi*p+pi)*L+Li] = 0.0;
+                    for( int i = 0 ; i < 4 ; i ++)
+                    {
+                        idx[((bi*p+pi)*2+0)*4+i)*L+li] = -1;
+                        idx[((bi*p+pi)*2+1)*4+i)*L+li] = -1;
+                        w[((bi*p+pi)*4+i)*L+li] = 0.0;
+                    }
+                    continue;
+                }
+                int zxn = int(zx / stepx);
+                int zyn = int(zy / stepy);
+                //
+                idx[((bi*p+pi)*2+0)*4+0)*L+li] = zxn;
+                idx[((bi*p+pi)*2+1)*4+0)*L+li] = zyn;
+                idx[((bi*p+pi)*2+0)*4+1)*L+li] = zxn;
+                idx[((bi*p+pi)*2+1)*4+1)*L+li] = zyn+1;
+                idx[((bi*p+pi)*2+0)*4+2)*L+li] = zxn+1;
+                idx[((bi*p+pi)*2+1)*4+2)*L+li] = zyn;
+                idx[((bi*p+pi)*2+0)*4+3)*L+li] = zxn+1;
+                idx[((bi*p+pi)*2+1)*4+3)*L+li] = zyn+1;
+                //
+                float x1w = zx - zxn*stepx;
+                float x2w = (zxn+1)*stepx - zx;
+                float y1w = zy - zyn*stepy;
+                float y2w = (zyn+1)*stepy - zy;
+                //
+                float w1 = y2w*x2w/((y1w+y2w)*(x1w+x2w));
+                w[((bi*p+pi)*4+0)*L+li] = w1;
+                float w2 = y1w*x2w/((y1w+y2w)*(x1w+x2w));
+                w[((bi*p+pi)*4+1)*L+li] = w2;
+                float w3 = y2w*x1w/((y1w+y2w)*(x1w+x2w));
+                w[((bi*p+pi)*4+2)*L+li] = w3
+                float w4 =  y1w*x1w/((y1w+y2w)*(x1w+x2w));
+                w[((bi*p+pi)*4+3)*L+li] = w4;
+                //
+                float p1 = prob[((bi*p+pi)*H+zyn)*W+zxn];
+                float p2 = prob[((bi*p+pi)*H+zyn+1)*W+zxn];
+                float p3 = prob[((bi*p+pi)*H+zyn)*W+zxn+1];
+                float p4 = prob[((bi*p+pi)*H+zyn+1)*W+zxn+1];
+                //
+                p[(bi*p+pi)*L+Li] = p1*w1+p2*w2+p3*w3+p4*w4;
+            }
+}
+
+int interp_cuda_forward(at::Tensor z,at::Tensor prob,at::Tensor idx,at::Tensor w,at::Tensor p)
+{
+    const auto b = z.size(0);
+    const auto p = z.size(1); 
+    const auto L = z.size(3);
+    const auto H = prob.size(3);
+    const auto W = prob.size(4);
+    interpKernel<<<dim3(b,25,1),512>>>(b,p,L,H,W,z.data<float>(),prob.data<float>(),idx.data<int>(),w.data<float>(),p.data<float>());
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("error in nnd Knn: %s\n", cudaGetErrorString(err));
+        return 0;
+    }
+    return 1;
+}
+
+__global__ void interpGradKernel(const int b, const int p,const int L,const int H,const int W,const float* grad,const int* idx,const float* w,float* gradp)
+{
+    float stepy = 1.0 / float(H - 1);
+    float stepx = 1.0 / float(W - 1);
+    for ( int bi = blockIdx.x ; bi < b ; bi += gridDim.x )
+        for ( int pi = blockIdx.y; pi < p ; pi += gridDim.y )
+            for ( int li = threadIdx.x; li < L ; li += blockDim.x )
+            {
+                float g = grad[((bi*p+pi)*L+li];
+                for(int i = 0 ; i < 4; i++)
+                {
+                    float wv = w[((bi*p+pi)*4+i)*L+li];
+                    const int x = idx[((bi*p+pi)*2+0)*4+i)*L+li];
+                    const int y = idx[((bi*p+pi)*2+1)*4+i)*L+li];
+                    atomicAdd(&(prob[((bi*p+pi)*H+y)*W+x]),g*wv);
+                }
+            }
+}
+
+int interp_cuda_backward(at::Tensor grad,at::Tensor idx,at::Tensor w,at::Tensor gradp)
+{
+    const auto b = grad.size(0);
+    const auto p = grad.size(1); 
+    const auto L = grad.size(2);
+    const auto H = gradp.size(3);
+    const auto W = gradp.size(4);
+    interpGradKernel<<<dim3(b,25,1),512>>>(b,p,L,H,W,grad.data<float>(),idx.data<int>(),w.data<float>(),gradp.data<float>())
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("error in nnd Knn: %s\n", cudaGetErrorString(err));
+        return 0;
+    }
+    return 1;
+}
 

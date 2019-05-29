@@ -97,7 +97,7 @@ class interpFunction(Function):
         assert b == b1,'the input have different batch size %d and %d'%(b,b1);
         assert p == p1,'the input have different patch number %d and %d'%(p,p1);
         gradz = torch.zeros_like(z);
-        gradp = torch.zeros_like(z);
+        gradp = torch.zeros_like(prob);
         chamfer.interp_backward(grad,idx,w,gradp);
         return gradz,gradp ;
 

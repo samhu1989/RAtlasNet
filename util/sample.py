@@ -19,9 +19,9 @@ def interppz(pos,prob):
     p2 = prob[int(yn)+1,int(xn)];
     p3 = prob[int(yn),int(xn)+1];
     p4 = prob[int(yn)+1,int(xn)+1];
-    p12 = ( p1*x2w + p2*x1w ) / (x1w+x2w);
-    p34 = ( p3*x2w + p4*x1w ) / (x1w+x2w);
-    return ( p12*y2w + p34*y1w ) / (y1w+y2w);
+    p12 = ( p1*y2w + p2*y1w ) / (y1w+y2w);
+    p34 = ( p3*y2w + p4*y1w ) / (y1w+y2w);
+    return ( p12*x2w + p34*x1w ) / (x1w+x2w);
 
 def pz(z,prob):
     func = partial(interppz,prob=prob);
