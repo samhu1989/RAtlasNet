@@ -16,6 +16,14 @@ int interp_cuda_backward(at::Tensor grad,at::Tensor idx,at::Tensor w,at::Tensor 
 
 int knn_cuda(at::Tensor xyz,at::Tensor k,at::Tensor dist,at::Tensor idx);
 
+int select_cuda_forward(at::Tensor in,at::Tensor select,at::Tensor idx,at::Tensor out);
+
+int select_cuda_backward(at::Tensor outgrad,at::Tensor idx,at::Tensor ingrad);
+
+int select_backward(at::Tensor grad,at::Tensor idx,at::Tensor gradp){
+    return select_cuda_backward(grad,idx,gradp);
+}
+
 int chamfer_forward(at::Tensor xyz1, at::Tensor xyz2, at::Tensor dist1, at::Tensor dist2, at::Tensor idx1, at::Tensor idx2) {
     return chamfer_cuda_forward(xyz1, xyz2, dist1, dist2, idx1, idx2);
 }
@@ -38,10 +46,20 @@ int interp_backward(at::Tensor grad,at::Tensor idx,at::Tensor w,at::Tensor gradp
     return interp_cuda_backward(grad,idx,w,gradp);
 }
 
+int select_forward(at::Tensor in,at::Tensor select,at::Tensor idx,at::Tensor out){
+    return select_cuda_forward(in,select,idx,out);
+}
+
+int select_backward(at::Tensor grad,at::Tensor idx,at::Tensor gradp){
+    return select_cuda_backward(grad,idx,gradp);
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("forward", &chamfer_forward, "chamfer forward (CUDA)");
   m.def("backward", &chamfer_backward, "chamfer backward (CUDA)");
   m.def("knn", &knn, "knn (CUDA)");
   m.def("interp_forward",&interp_forward,"bilinear interp (CUDA)");
   m.def("interp_backward",&interp_backward,"bilinear interp (CUDA)");
+  m.def("select_forward",&select_forward,"probability select (CUDA)");
+  m.def("select_backward",&select_backward,"probability select (CUDA)");
 }

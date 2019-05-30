@@ -7,6 +7,7 @@ import sys
 from numbers import Number
 from collections import Set, Mapping, deque
 import chamfer
+import copy
 
 
 # Chamfer's distance module @thibaultgroueix
@@ -100,4 +101,26 @@ class interpFunction(Function):
         gradp = torch.zeros_like(prob);
         chamfer.interp_backward(grad,idx,w,gradp);
         return gradz,gradp ;
+        
+selectN = 100;
+class selectFunction(Function):
+    @staticmethod
+    def forward(ctx,input,selectbool):
+        global selectN;
+        size = z.size();
+        outsize = copy.deepcopy(size);
+        outsize[-1] = selectN;
+        output = torch.zeros(*outsize).type(torch.FloatTensor);
+        output = output.cuda();
+        outidx = torch.zeros(size[0],size[1],selectN).type(torch.IntTensor);
+        outidx = outidx.cuda();
+        chamfer.select_forward(input,selectbool,outidx,output);
+        ctx.save_for_backward(input,outidx);
+        return output;
 
+    @staticmethod
+    def backward(ctx,outputgrad):
+        input,outidx = ctx.saved_tensors;
+        inputgrad = torch.zeros_like(input);
+        chamfer.select_backward(outputgrad,outidx,inputgrad);
+        return inputgrad;

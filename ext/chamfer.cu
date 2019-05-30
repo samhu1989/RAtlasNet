@@ -426,6 +426,7 @@ __global__ void interpGradKernel(const int b, const int p,const int L,const int 
                     float wv = w[((bi*p+pi)*4+i)*L+li];
                     const int x = idx[((bi*p+pi)*2+0)*4+i)*L+li];
                     const int y = idx[((bi*p+pi)*2+1)*4+i)*L+li];
+                    if((x == -1) || (y == -1))break;
                     atomicAdd(&(prob[((bi*p+pi)*H+y)*W+x]),g*wv);
                 }
             }
@@ -439,6 +440,108 @@ int interp_cuda_backward(at::Tensor grad,at::Tensor idx,at::Tensor w,at::Tensor 
     const auto H = gradp.size(3);
     const auto W = gradp.size(4);
     interpGradKernel<<<dim3(b,25,1),512>>>(b,p,L,H,W,grad.data<float>(),idx.data<int>(),w.data<float>(),gradp.data<float>())
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("error in nnd Knn: %s\n", cudaGetErrorString(err));
+        return 0;
+    }
+    return 1;
+}
+
+__global__ void selectKernel(const int b, const int p,const int dim,const int L,const int N,const float* in,const bool* select,int* idx,float* out)
+{
+    for ( int bi = blockIdx.x ; bi < b ; bi += gridDim.x )
+        for ( int pi = blockIdx.y; pi < p ; pi += gridDim.y )
+        {
+            for ( int ni = threadIdx.x; ni < N ; ni += blockDim.x )
+            {
+                idx[(bi*p+pi)*N+ni] = -1;
+            }
+            __syncthreads();
+            for ( int li = threadIdx.x; li < L ; li += blockDim.x )
+            {
+                if( select[(bi*p+pi)*L+Li] )
+                {
+                    for( int ni = 0 ; ni < N ; ni ++ )
+                    {
+                        int v = atomicExch(&(idx[(bi*p+pi)*N+ni]),li)
+                        if( v == -1 )
+                        {
+                            for(int di=0;di<dim;++di)
+                            {
+                                out[((bi*p+pi)*dim+di)*N+ni] = in[((bi*p+pi)*dim+di)*L+li];
+                            }
+                            break;
+                        }else{
+                            atomicExch(&(idx[(bi*p+pi)*N+ni]),v);
+                        }
+                    }
+                }
+            }
+        }
+}
+
+int select_cuda_forward(at::Tensor in,at::Tensor select,at::Tensor idx,at::Tensor out)
+{
+    const auto b = in.size(0);
+    const auto p = in.size(1); 
+    const auto L = in.size(-1);
+    const auto d = in.dim();
+    const int dim = 1;
+    if(d == 3)
+    {
+        dim = 1;
+    }else if(d == 4){
+        dim = in.size(2);
+    }else{
+        printf("input tensor must be (B,P,C,L) or (B,P,L)");
+        return 0;
+    }
+    const auto N = out.size(-1);
+    selectKernel<<<dim3(b,25,1),512>>>(b,p,dim,L,N,in.data<float>(),select.data<bool>(),idx.data<int>(),out.data<float>());
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("error in nnd Knn: %s\n", cudaGetErrorString(err));
+        return 0;
+    }
+    return 1;
+}
+
+__global__ void selectGradKernel(const int b, const int p,const int dim,const int L,const int N,const float* outgrad,const int* idx,float* ingrad)
+{
+    for ( int bi = blockIdx.x ; bi < b ; bi += gridDim.x )
+        for ( int pi = blockIdx.y; pi < p ; pi += gridDim.y )
+        {
+            for ( int ni = threadIdx.x; ni < N ; ni += blockDim.x )
+            {
+                int li = idx[(bi*p+pi)*N+ni];
+                for(int di=0;di<dim;++di)
+                {
+                    ingrad[((bi*p+pi)*dim+di)*L+li] = outgrad[((bi*p+pi)*dim+di)*N+ni];
+                }
+            }
+        }
+}
+
+int select_cuda_backward(at::Tensor outgrad,at::Tensor idx,at::Tensor ingrad)
+{
+    const auto b = outgrad.size(0);
+    const auto p = outgrad.size(1); 
+    const auto N = outgrad.size(-1);
+    const auto d = outgrad.dim();
+    const auto L = ingrad.size(-1);
+    const int dim = 1;
+    if(d == 3)
+    {
+        dim = 1;
+    }else if(d == 4){
+        dim = in.size(2);
+    }else{
+        printf("input tensor must be (B,P,C,L) or (B,P,L)");
+        return 0;
+    }
+    const auto N = out.size(-1);
+    selectGradKernel<<<dim3(b,25,1),512>>>(b,p,dim,L,N,outgrad.data<float>(),idx.data<int>(),ingrad.data<float>());
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
         printf("error in nnd Knn: %s\n", cudaGetErrorString(err));
